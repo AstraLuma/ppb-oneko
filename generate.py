@@ -88,7 +88,7 @@ def map_name(name):
         'dwright2': 'downright2',
         'mati2': 'neutral',
         'mati3': 'yawn',
-        'jare2': 'idle_a',
+        'jare2': 'fidget',
         'kaki1': 'itch1',
         'kaki2': 'itch2',
         # Jare, Kaki, Akubi
