@@ -10,6 +10,17 @@ ANIMATED = {
 }
 
 
+class NekoFactory:
+    def __init__(self, character):
+        self.character = character
+
+    def neutral(self):
+        ...
+
+    def fidget(self):
+        ...
+
+
 class Neko(ppb.BaseSprite):
     character = 'neko'
 
@@ -37,7 +48,7 @@ class NekoScene(ppb.BaseScene):
         cam.pixel_ratio = 32
         self.add(Neko(character=self.character, pose='neutral', position=( 0,  0)))
         self.add(Neko(character=self.character, pose='cursor',  position=( 1,  0)))
-        self.add(Neko(character=self.character, pose='idle_a',  position=(-1, -1)))
+        self.add(Neko(character=self.character, pose='fidget',  position=(-1, -1)))
         self.add(Neko(character=self.character, pose='yawn',    position=( 0, -1)))
         self.add(Neko(character=self.character, pose='awake',   position=( 1, -1)))
         self.add(Neko(character=self.character, pose='itch',    position=( 0,  1)))
