@@ -39,7 +39,7 @@ ANIMATIONS = {
 
 
 SETTINGS = {
-    # name: (speed, idle, time)
+    # name: (speed, idle)
     'neko':   (13/32, 0.1875),
     'tora':   (16/32, 0.1875),
     'dog':    (10/32, 0.1875),
@@ -47,6 +47,7 @@ SETTINGS = {
     'sakura': (13/32, 0.1875),
     'tomoyo': (10/32, 0.1875)
 }
+
 
 @dataclass
 class NekoTick:
@@ -160,16 +161,9 @@ class LivingNeko(BaseNeko):
         self._state = value
         self.state_count = 0
 
-    def direction(self, move_delta):
-        if move_delta == (0, 0):
-            new_state = 'stop'
-        else:
-            new_state = 'move'
+    def on_update(self, event, signal):
+        cam = event.scene.main_camera
 
-        if self.state != new_state:
-            self.state = new_state
-
-    def _update_window(self, cam):
         self.window_left = cam.frame_left
         self.window_right = cam.frame_right
         self.window_top = cam.frame_top
@@ -195,16 +189,16 @@ class LivingNeko(BaseNeko):
 
         return rv
 
-    def is_dont_move(self):
+    def will_not_move(self):
         return self.position == self.prev_position
 
-    def is_move_start(self):
-        if (self.target - self.prev_target).length > self.idle_space:
+    def should_start_moving(self, delta):
+        if delta.length > self.idle_space:
             return True
 
-    def calc_dx_dy(self):
+    def calc_movement(self):
         """
-        Calculate distance to target
+        Calculate our movement
         """
         delta = self.target - self.position
         if delta:
@@ -216,30 +210,32 @@ class LivingNeko(BaseNeko):
             move = Vector(0, 0)
         return move
 
-    def think_draw(self):
-        move_delta = self.calc_dx_dy()
+    def on_neko_tick(self, event, signal):
+        if event.count % 2 == 0:
+            self.state_count += 1
+
+        self.run_state_machine()
+        self.prev_target = self.target
+        self.prev_position = self.position
+
+    def run_state_machine(self):
+        move_delta = self.calc_movement()
 
         self.facing = move_delta
         self.pose = self.state
 
         if self.state == 'stop':
-            if self.is_move_start():
+            if self.should_start_moving(move_delta):
                 self.state = 'awake'
             elif self.state_count < self.STOP_TIME:
                 pass
-            elif move_delta.x < 0 and self.left <= self.window_left:
-                self.state = 'wall'
-            elif move_delta.x > 0 and self.right >= self.window_right:
-                self.state = 'wall'
-            elif move_delta.y > 0 and self.top >= self.window_top:  # Omitting some ToFocus behavior
-                self.state = 'wall'
-            elif move_delta.y < 0 and self.bottom <= self.window_bottom:  # Omitting some ToFocus behavior
+            elif move_delta and self.clamp_to_frame():  # Side-effect: might move self
                 self.state = 'wall'
             else:
                 self.state = 'fidget'
 
         elif self.state == 'fidget':
-            if self.is_move_start():
+            if self.should_start_moving(move_delta):
                 self.state = 'awake'
             elif self.state_count < self.FIDGET_TIME:
                 pass
@@ -247,7 +243,7 @@ class LivingNeko(BaseNeko):
                 self.state = 'itch'
 
         elif self.state == 'itch':
-            if self.is_move_start():
+            if self.should_start_moving(move_delta):
                 self.state = 'awake'
             elif self.state_count < self.ITCH_TIME:
                 pass
@@ -255,7 +251,7 @@ class LivingNeko(BaseNeko):
                 self.state = 'yawn'
 
         elif self.state == 'yawn':
-            if self.is_move_start():
+            if self.should_start_moving(move_delta):
                 self.state = 'awake'
             elif self.state_count < self.YAWN_TIME:
                 pass
@@ -263,24 +259,26 @@ class LivingNeko(BaseNeko):
                 self.state = 'sleep'
 
         elif self.state == 'sleep':
-            if self.is_move_start():
+            if self.should_start_moving(move_delta):
                 self.state = 'awake'
 
         elif self.state == 'awake':
             if self.state_count < self.AWAKE_TIME:
                 pass
             else:
-                self.direction(move_delta)
+                self.state = 'move'
 
         elif self.state == 'move':
             self.position += move_delta
-            self.direction(move_delta)
-            if self.clamp_to_frame():
-                if self.is_dont_move():
+            if not move_delta:
+                self.state = 'stop'
+            elif self.clamp_to_frame():
+                if self.will_not_move():
+                    # Really, we were clamped this tick and last
                     self.state = 'stop'
 
         elif self.state == 'wall':
-            if self.is_move_start():
+            if self.should_start_moving(move_delta):
                 self.state = 'awake'
             elif self.state_count < self.WALL_SCRATCH_TIME:
                 pass
@@ -290,14 +288,3 @@ class LivingNeko(BaseNeko):
         else:
             # Shouldn't happen
             self.state = 'stop'
-
-    def on_update(self, event, signal):
-        self._update_window(event.scene.main_camera)
-
-    def on_neko_tick(self, event, signal):
-        if event.count % 2 == 0:
-            self.state_count += 1
-
-        self.think_draw()
-        self.prev_target = self.target
-        self.prev_position = self.position
