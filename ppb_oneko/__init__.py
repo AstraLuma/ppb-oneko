@@ -1,6 +1,7 @@
 import ppb
 from ppb import Vector
 from pathlib import Path
+from dataclasses import dataclass
 
 
 def _find_closest_vector(needle, mapping):
@@ -39,13 +40,17 @@ ANIMATIONS = {
 
 SETTINGS = {
     # name: (speed, idle, time)
-    'neko':   (13/32, 0.1875, 0.125),
-    'tora':   (16/32, 0.1875, 0.125),
-    'dog':    (10/32, 0.1875, 0.125),
-    'bsd':    (10/32, 0.1875, 0.25),
-    'sakura': (13/32, 0.1875, 0.125),
-    'tomoyo': (10/32, 0.1875, 0.125)
+    'neko':   (13/32, 0.1875),
+    'tora':   (16/32, 0.1875),
+    'dog':    (10/32, 0.1875),
+    'bsd':    (10/32, 0.1875),  # FIXME: Runs half as fast as the others?
+    'sakura': (13/32, 0.1875),
+    'tomoyo': (10/32, 0.1875)
 }
+
+@dataclass
+class NekoTick:
+    count: int
 
 
 class BaseNeko(ppb.BaseSprite):
@@ -66,18 +71,14 @@ class BaseNeko(ppb.BaseSprite):
     tick_rate = 8
 
     # We're using our own timer because the 8Hz tick doesn't line up with the 60Hz PPB Update
+    # FIXME: Make this a targeted event
     def on_idle(self, event, signal):
         self._time_left -= event.time_delta
 
         if self._time_left <= 0:
             self._time_left = 1/self.tick_rate
             self._tick += 1
-            self.do_tick(self._tick, signal)
-
-    def do_tick(self, count, signal):
-        """
-        Triggered on the 8Hz tick
-        """
+            signal(NekoTick(count=self._tick))
 
     @property
     def facing(self):
@@ -140,24 +141,13 @@ class LivingNeko(BaseNeko):
 
     @property
     def speed(self):
-        speed, idle, time = SETTINGS[self.character]
+        speed, idle = SETTINGS[self.character]
         return speed
 
     @property
     def idle_space(self):
-        speed, idle, time = SETTINGS[self.character]
+        speed, idle = SETTINGS[self.character]
         return idle
-
-    @property
-    def interval_time(self):
-        speed, idle, time = SETTINGS[self.character]
-        return time
-
-    def _update_window(self, cam):
-        self.window_left = cam.frame_left
-        self.window_right = cam.frame_right
-        self.window_top = cam.frame_top
-        self.window_bottom = cam.frame_bottom
 
     @property
     def state(self):
@@ -179,7 +169,16 @@ class LivingNeko(BaseNeko):
         if self.state != new_state:
             self.state = new_state
 
-    def is_window_over(self):
+    def _update_window(self, cam):
+        self.window_left = cam.frame_left
+        self.window_right = cam.frame_right
+        self.window_top = cam.frame_top
+        self.window_bottom = cam.frame_bottom
+
+    def clamp_to_frame(self):
+        """
+        Limit us to the current frame, returning True if clamping happened.
+        """
         rv = False
         if self.bottom <= self.window_bottom:
             self.bottom = self.window_bottom
@@ -276,7 +275,7 @@ class LivingNeko(BaseNeko):
         elif self.state == 'move':
             self.position += move_delta
             self.direction(move_delta)
-            if self.is_window_over():
+            if self.clamp_to_frame():
                 if self.is_dont_move():
                     self.state = 'stop'
 
@@ -295,8 +294,8 @@ class LivingNeko(BaseNeko):
     def on_update(self, event, signal):
         self._update_window(event.scene.main_camera)
 
-    def do_tick(self, count, signal):
-        if count % 2 == 0:
+    def on_neko_tick(self, event, signal):
+        if event.count % 2 == 0:
             self.state_count += 1
 
         self.think_draw()
