@@ -268,10 +268,3 @@ class LivingNeko(ppb.BaseSprite):
             self._time_left = self.interval_time
             self.prev_target = self.target
             self.prev_position = self.position
-
-
-if __name__ == '__main__':
-    def setup(scene):
-        scene.add(LivingNeko)
-
-    ppb.run(setup)
