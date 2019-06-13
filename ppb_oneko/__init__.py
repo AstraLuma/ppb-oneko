@@ -270,10 +270,6 @@ class LivingNeko(ppb.BaseSprite):
             self.prev_position = self.position
 
 
-    def on_mouse_motion(self, event, signal):
-        self.target = event.position
-
-
 if __name__ == '__main__':
     def setup(scene):
         scene.add(LivingNeko)
