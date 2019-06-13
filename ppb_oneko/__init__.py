@@ -48,10 +48,78 @@ SETTINGS = {
 }
 
 
-class LivingNeko(ppb.BaseSprite):
+class BaseNeko(ppb.BaseSprite):
+    # The current character, one of: neko, tora, dog, bsd, sakura, tomoyo
     character = 'neko'
+    #: The current pose, one of: stop, fidget, itch, yawn, sleep, awake, move, wall
+    pose = 'neutral'
 
-    tick_count = 0
+    resource_path = Path(__file__).absolute().parent
+
+    # This overrides facing because there's a bunch of assets for different rotations
+    _facing = Vector(1, 0)
+
+    _time_left = 0
+    _tick = 0
+
+    #: Tick rate in Hz
+    tick_rate = 8
+
+    # We're using our own timer because the 8Hz tick doesn't line up with the 60Hz PPB Update
+    def on_idle(self, event, signal):
+        self._time_left -= event.time_delta
+
+        if self._time_left <= 0:
+            self._time_left = 1/self.tick_rate
+            self._tick += 1
+            self.do_tick(self._tick, signal)
+
+    def do_tick(self, count, signal):
+        """
+        Triggered on the 8Hz tick
+        """
+
+    @property
+    def facing(self):
+        return self._facing
+
+    @facing.setter
+    def facing(self, value):
+        self._facing = value
+        self._wall_facing = _find_closest_vector(value, {
+            (1, 0): 'right',
+            (0, 1): 'up',
+            (-1, 0): 'left',
+            (0, -1): 'down',
+        })
+        self._move_facing = _find_closest_vector(value, {
+            (1, 0): 'right',
+            (1, 1): 'upright',
+            (0, 1): 'up',
+            (-1, 1): 'upleft',
+            (-1, 0): 'left',
+            (-1, -1): 'downleft',
+            (0, -1): 'down',
+            (1, -1): 'downright',
+        })
+
+    def on_pre_render(self, event, signal):
+        if self.pose == 'move':
+            pose = f'move:{self._move_facing}'
+        elif self.pose == 'wall':
+            pose = f'wall:{self._wall_facing}'
+        else:
+            pose = self.pose
+
+        if self.pose != 'sleep':
+            frame = ANIMATIONS[pose][self._tick & 0x1]
+        else:
+            frame = ANIMATIONS[pose][(self._tick >> 2) & 0x1]
+
+        self.image = f'{self.character}/{frame}.png'
+
+
+class LivingNeko(BaseNeko):
     state_count = 0
     target = Vector(0, 0)
     _state = 'stop'
@@ -67,8 +135,6 @@ class LivingNeko(ppb.BaseSprite):
     YAWN_TIME = 6
     AWAKE_TIME = 3
     WALL_SCRATCH_TIME = 10
-
-    MAX_TICK = 9999  # Odd only
 
     resource_path = Path(__file__).absolute().parent
 
@@ -93,24 +159,6 @@ class LivingNeko(ppb.BaseSprite):
         self.window_top = cam.frame_top
         self.window_bottom = cam.frame_bottom
 
-    def _animation(self):
-        if self.state != 'sleep':
-            frame = ANIMATIONS[self.state][self.tick_count & 0x1]
-        else:
-            frame = ANIMATIONS[self.state][(self.tick_count >> 2) & 0x1]
-
-        self.image = f'{self.character}/{frame}.png'
-
-    def increment_tick(self):
-        self.tick_count += 1
-
-        if self.tick_count >= self.MAX_TICK:
-            self.tick_count = 0
-
-        if self.tick_count % 2 == 0:
-            if self.state_count < self.MAX_TICK:
-                self.state_count += 1
-
     @property
     def state(self):
         return self._state
@@ -120,23 +168,13 @@ class LivingNeko(ppb.BaseSprite):
         if self._state != value:
             print("Set state:", value)
         self._state = value
-        self.tick_count = 0
         self.state_count = 0
 
     def direction(self, move_delta):
         if move_delta == (0, 0):
             new_state = 'stop'
         else:
-            new_state = _find_closest_vector(move_delta, {
-                (1, 0): 'move:right',
-                (1, 1): 'move:upright',
-                (0, 1): 'move:up',
-                (-1, 1): 'move:upleft',
-                (-1, 0): 'move:left',
-                (-1, -1): 'move:downleft',
-                (0, -1): 'move:down',
-                (1, -1): 'move:downright',
-            })
+            new_state = 'move'
 
         if self.state != new_state:
             self.state = new_state
@@ -182,9 +220,8 @@ class LivingNeko(ppb.BaseSprite):
     def think_draw(self):
         move_delta = self.calc_dx_dy()
 
-        self._animation()
-
-        self.increment_tick()
+        self.facing = move_delta
+        self.pose = self.state
 
         if self.state == 'stop':
             if self.is_move_start():
@@ -192,13 +229,13 @@ class LivingNeko(ppb.BaseSprite):
             elif self.state_count < self.STOP_TIME:
                 pass
             elif move_delta.x < 0 and self.left <= self.window_left:
-                self.state = 'wall:left'
+                self.state = 'wall'
             elif move_delta.x > 0 and self.right >= self.window_right:
-                self.state = 'wall:right'
+                self.state = 'wall'
             elif move_delta.y > 0 and self.top >= self.window_top:  # Omitting some ToFocus behavior
-                self.state = 'wall:up'
+                self.state = 'wall'
             elif move_delta.y < 0 and self.bottom <= self.window_bottom:  # Omitting some ToFocus behavior
-                self.state = 'wall:down'
+                self.state = 'wall'
             else:
                 self.state = 'fidget'
 
@@ -236,14 +273,14 @@ class LivingNeko(ppb.BaseSprite):
             else:
                 self.direction(move_delta)
 
-        elif self.state.startswith('move:'):
+        elif self.state == 'move':
             self.position += move_delta
             self.direction(move_delta)
             if self.is_window_over():
                 if self.is_dont_move():
                     self.state = 'stop'
 
-        elif self.state.startswith('wall:'):
+        elif self.state == 'wall':
             if self.is_move_start():
                 self.state = 'awake'
             elif self.state_count < self.WALL_SCRATCH_TIME:
@@ -255,16 +292,13 @@ class LivingNeko(ppb.BaseSprite):
             # Shouldn't happen
             self.state = 'stop'
 
-    _time_left = 0
-
-    # We're using our own timer because the 8Hz tick doesn't line up with the 60Hz PPB Update
-    def on_idle(self, event, signal):
+    def on_update(self, event, signal):
         self._update_window(event.scene.main_camera)
 
-        self._time_left -= event.time_delta
+    def do_tick(self, count, signal):
+        if count % 2 == 0:
+            self.state_count += 1
 
-        if self._time_left <= 0:
-            self.think_draw()
-            self._time_left = self.interval_time
-            self.prev_target = self.target
-            self.prev_position = self.position
+        self.think_draw()
+        self.prev_target = self.target
+        self.prev_position = self.position
