@@ -142,7 +142,6 @@ class LivingNeko(ppb.BaseSprite):
             self.state = new_state
 
     def is_window_over(self):
-        # EH? This is clearly clamping the position, but I'm not sure to what.
         rv = False
         if self.bottom <= self.window_bottom:
             self.bottom = self.window_bottom
@@ -163,7 +162,6 @@ class LivingNeko(ppb.BaseSprite):
         return self.position == self.prev_position
 
     def is_move_start(self):
-        print("is_move_start", self.target, self.prev_target)
         if (self.target - self.prev_target).length > self.idle_space:
             return True
 
@@ -193,9 +191,9 @@ class LivingNeko(ppb.BaseSprite):
                 self.state = 'awake'
             elif self.state_count < self.STOP_TIME:
                 pass
-            elif move_delta.x < 0 and self.position.x <= self.window_left:
+            elif move_delta.x < 0 and self.left <= self.window_left:
                 self.state = 'wall:left'
-            elif move_delta.x > 0 and self.position.x >= self.window_right:
+            elif move_delta.x > 0 and self.right >= self.window_right:
                 self.state = 'wall:right'
             elif move_delta.y > 0 and self.top >= self.window_top:  # Omitting some ToFocus behavior
                 self.state = 'wall:up'
@@ -235,7 +233,8 @@ class LivingNeko(ppb.BaseSprite):
         elif self.state == 'awake':
             if self.state_count < self.AWAKE_TIME:
                 pass
-            self.direction(move_delta)
+            else:
+                self.direction(move_delta)
 
         elif self.state.startswith('move:'):
             self.position += move_delta
@@ -249,7 +248,8 @@ class LivingNeko(ppb.BaseSprite):
                 self.state = 'awake'
             elif self.state_count < self.WALL_SCRATCH_TIME:
                 pass
-            self.state = 'itch'
+            else:
+                self.state = 'itch'
 
         else:
             # Shouldn't happen
